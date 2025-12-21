@@ -7,7 +7,6 @@ import { DataTableColumnHeader } from "@/components/DataTableColumnHeaderProps";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
 import Link from "next/link";
-import { useUser } from "@clerk/nextjs";
 import axios from "axios";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -15,20 +14,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export type Teacher = {
   id: string;
-  teacherId: string;
+  username: string;
   name: string;
+  surname: string;
   email: string;
-  subjects: string[];
-  classes: string[];
+  subjects: { id: number; name: string }[];
+  classes: { id: number; name: string }[];
   phone: string;
   address: string;
 };
 
-export const useTeacherColumns = () => {
+export const useTeacherColumns = (role?: string) => {
   const router = useRouter();
-  const { user } = useUser();
-  const role = user?.publicMetadata.role as string | undefined;
-
   const queryClient = useQueryClient();
 
   const deleteTeacherMutation = useMutation({
@@ -41,15 +38,10 @@ export const useTeacherColumns = () => {
       queryClient.invalidateQueries({ queryKey: ["teachers"] });
     },
     onError: (error: any) => {
-      console.error("Error deleting teacher:", error);
-      toast.error("Failed to delete teacher");
+      const message = error.response?.data?.message || "Failed to delete teacher";
+      toast.error(message);
     },
   });
-
-  // Usage
-  const handleDelete = (teacherId: string) => {
-    deleteTeacherMutation.mutate(teacherId);
-  };
 
   const columns: ColumnDef<Teacher>[] = [
     {
@@ -75,14 +67,15 @@ export const useTeacherColumns = () => {
       enableHiding: false,
     },
     {
-      accessorKey: "id",
-      header: "Teacher ID",
+      accessorKey: "username",
+      header: "Username",
     },
     {
       accessorKey: "name",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Name" />
       ),
+      cell: ({ row }) => `${row.original.name} ${row.original.surname}`,
     },
     {
       accessorKey: "email",
@@ -92,11 +85,13 @@ export const useTeacherColumns = () => {
     },
     {
       accessorKey: "subjects",
-      header: "Subject",
+      header: "Subjects",
+      cell: ({ row }) => row.original.subjects?.map(s => s.name).join(", ") || "None",
     },
     {
       accessorKey: "classes",
       header: "Classes",
+      cell: ({ row }) => row.original.classes?.map(c => c.name).join(", ") || "None",
     },
     {
       accessorKey: "phone",
@@ -108,39 +103,39 @@ export const useTeacherColumns = () => {
     },
     ...(role === "admin"
       ? [
-          {
-            id: "action",
-            header: () => <div className="text-center">Action</div>,
-            cell: ({ row }: { row: Row<Teacher> }) => (
-              <div className="flex items-center justify-center space-x-2">
-                <Link href={`/list/teachers/profile/${row.original.id}`}>
+        {
+          id: "action",
+          header: () => <div className="text-center">Action</div>,
+          cell: ({ row }: { row: Row<Teacher> }) => (
+            <div className="flex items-center justify-center space-x-2">
+              <Link href={`/list/teachers/profile/${row.original.id}`}>
+                <Button variant="ghost" size="icon">
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link
+                href={`/list/teachers/manage?action=edit&id=${row.original.id}`}
+              >
+                <Button variant="ghost" size="icon">
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </Link>
+              <DeleteDialog
+                trigger={
                   <Button variant="ghost" size="icon">
-                    <Eye />
+                    <Trash className="h-4 w-4 text-destructive" />
                   </Button>
-                </Link>
-                <Link
-                  href={`/list/teachers/manage?action=edit&id=${row.original.id}`}
-                >
-                  <Button variant="ghost" size="icon">
-                    <Edit />
-                  </Button>
-                </Link>
-                <DeleteDialog
-                  trigger={
-                    <Button variant="ghost" size="icon">
-                      <Trash className="text-destructive" />
-                    </Button>
-                  }
-                  title="Delete Teacher"
-                  description="This action cannot be undone. This will permanently delete the teacher and remove their data from our servers."
-                  onDelete={() => {
-                    handleDelete(row.original.id);
-                  }}
-                />
-              </div>
-            ),
-          },
-        ]
+                }
+                title="Delete Teacher"
+                description="This action cannot be undone. This will permanently delete the teacher record if there are no dependencies."
+                onDelete={() => {
+                  deleteTeacherMutation.mutate(row.original.id);
+                }}
+              />
+            </div>
+          ),
+        },
+      ]
       : []),
   ];
 

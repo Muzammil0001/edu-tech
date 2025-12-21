@@ -111,8 +111,9 @@ export async function POST(req: Request) {
       {
         success: false,
         message: error?.message || "Something went wrong",
+        errors: error?.errors || [],
       },
-      { status: 500 }
+      { status: error?.status || 500 }
     );
   }
 }

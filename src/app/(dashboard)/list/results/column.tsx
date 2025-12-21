@@ -6,20 +6,23 @@ import { Button } from "@/components/ui/button";
 import { DataTableColumnHeader } from "@/components/DataTableColumnHeaderProps";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
+import axios from "axios";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 export type Result = {
   id: number;
-  subject: string;
-  class: string;
-  teacher: string;
-  student: string;
-  date: string;
-  type: string;
   score: number;
+  exam?: { title: string; lesson: { subject: { name: string } } };
+  assignment?: { title: string; lesson: { subject: { name: string } } };
+  student: { name: string; surname: string };
 };
 
-// ✅ Wrap columns inside a function to pass the role dynamically
 export const useResultColumns = (role?: string) => {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
   const columns: ColumnDef<Result>[] = [
     {
       id: "select",
@@ -33,7 +36,7 @@ export const useResultColumns = (role?: string) => {
           aria-label="Select all"
         />
       ),
-      cell: ({ row }: { row: Row<Result> }) => (
+      cell: ({ row }) => (
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
@@ -44,40 +47,43 @@ export const useResultColumns = (role?: string) => {
       enableHiding: false,
     },
     {
-      accessorKey: "subject",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Subject" />
-      ),
-    },
-    {
-      accessorKey: "class",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Class" />
-      ),
-    },
-    {
-      accessorKey: "teacher",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Teacher" />
-      ),
-    },
-    {
       accessorKey: "student",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Student" />
       ),
-    },
-    {
-      accessorKey: "date",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Date" />
-      ),
+      cell: ({ row }) => {
+        const s = row.original.student;
+        return s ? `${s.name} ${s.surname}` : "N/A";
+      },
     },
     {
       accessorKey: "type",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Type" />
       ),
+      cell: ({ row }) => row.original.exam ? "Exam" : "Assignment",
+    },
+    {
+      accessorKey: "title",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Exams / Assignment" />
+      ),
+      cell: ({ row }) => {
+        const res = row.original;
+        const info = res.exam || res.assignment;
+        return info?.title || "N/A";
+      },
+    },
+    {
+      accessorKey: "subject",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Subject" />
+      ),
+      cell: ({ row }) => {
+        const res = row.original;
+        const info = res.exam || res.assignment;
+        return info?.lesson?.subject?.name || "N/A";
+      },
     },
     {
       accessorKey: "score",
@@ -85,26 +91,40 @@ export const useResultColumns = (role?: string) => {
         <DataTableColumnHeader column={column} title="Score" />
       ),
     },
-    ...(role === "admin" || "teacher"
+    ...(role === "admin" || role === "teacher"
       ? [
         {
           id: "action",
           header: () => <div className="text-center">Action</div>,
           cell: ({ row }: { row: Row<Result> }) => (
             <div className="flex items-center justify-center space-x-2">
-              <Button variant="ghost" size="icon">
-                <Edit />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/list/results/manage?action=edit&id=${row.original.id}`)}
+              >
+                <Edit className="h-4 w-4" />
               </Button>
               <DeleteDialog
                 trigger={
                   <Button variant="ghost" size="icon">
-                    <Trash className="text-destructive" />
+                    <Trash className="h-4 w-4 text-destructive" />
                   </Button>
                 }
                 title="Delete Result"
-                description="This action cannot be undone. This will permanently delete the result and remove their data from our servers."
-                onDelete={() => {
-                  console.log("Deleting result:", row.original);
+                description="This action cannot be undone."
+                onDelete={async () => {
+                  try {
+                    const res = await axios.delete(`/api/results/delete/${row.original.id}`);
+                    if (res.data.success) {
+                      toast.success("Result deleted successfully");
+                      queryClient.invalidateQueries({ queryKey: ["results"] });
+                    } else {
+                      toast.error(res.data.message || "Failed to delete result");
+                    }
+                  } catch (error: any) {
+                    toast.error("An error occurred during deletion");
+                  }
                 }}
               />
             </div>

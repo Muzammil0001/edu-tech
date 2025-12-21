@@ -1,5 +1,6 @@
 "use client";
-import React, { useEffect } from "react";
+
+import React from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { format, getMonth, getYear, setMonth, setYear } from "date-fns";
@@ -15,7 +16,7 @@ import {
   FormLabel,
 } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
@@ -32,7 +33,8 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Loader from "@/components/ui/loader";
 
 const Schema = z.object({
   username: z
@@ -43,16 +45,8 @@ const Schema = z.object({
   password: z
     .string()
     .min(8, { message: "Password must be at least 8 characters long" })
-    .regex(/[a-z]/, {
-      message: "Password must contain at least one lowercase letter",
-    })
-    .regex(/[A-Z]/, {
-      message: "Password must contain at least one uppercase letter",
-    })
-    .regex(/[0-9]/, { message: "Password must contain at least one number" })
-    .regex(/[^a-zA-Z0-9]/, {
-      message: "Password must contain at least one special character",
-    }),
+    .optional()
+    .or(z.literal("")),
   firstname: z
     .string()
     .min(3, { message: "First name must be at least 3 characters long" }),
@@ -73,84 +67,17 @@ const Schema = z.object({
     message: "Blood type is required",
   }),
 });
+
 type FormData = z.infer<typeof Schema>;
 
 const ManageTeacher = () => {
   const router = useRouter();
-  const [action, setAction] = React.useState<string>("create");
-  const search = useSearchParams();
-  const path = search.get("action");
-  const id = search.get("id");
-  console.log(path, id);
-
+  const searchParams = useSearchParams();
+  const action = searchParams.get("action") || "create";
+  const id = searchParams.get("id");
   const queryClient = useQueryClient();
 
   const [date, setDate] = React.useState<Date>(new Date());
-
-  useEffect(() => {
-    const fetchTeacher = async () => {
-      if (action === "edit" && id) {
-        try {
-          const response = await axios.get(`/api/teachers/getteacher/${id}`);
-          const teacherData = response.data.data;
-
-          // Convert birthday string to Date object if it exists
-          const birthday = teacherData.birthday
-            ? new Date(teacherData.birthday)
-            : undefined;
-          console.log(teacherData);
-          // Reset form values with the fetched data
-          form.reset({
-            username: teacherData.username || "",
-            firstname: teacherData.name || "",
-            lastname: teacherData.surname || "",
-            email: teacherData.email || "",
-            phone: teacherData.phone || "",
-            address: teacherData.address || "",
-            bloodType: teacherData.bloodType || "",
-            password: teacherData.password || "",
-            sex: teacherData.sex || undefined,
-            birthday: birthday,
-          });
-          setDate(birthday || new Date());
-          form.setValue("sex", teacherData.sex); // Set the gender value
-          form.setValue("bloodType", teacherData.bloodType);
-        } catch (error) {
-          console.error("Error fetching teacher:", error);
-        }
-      }
-    };
-
-    fetchTeacher();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [action, id]);
-
-  const months = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
-  const startYear = getYear(new Date()) - 100;
-  const endYear = getYear(new Date()) + 100;
-  const years = Array.from(
-    { length: endYear - startYear + 1 },
-    (_, i) => startYear + i
-  );
-
-  useEffect(() => {
-    if (path) {
-      setAction(path);
-    }
-  }, [path]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(Schema),
@@ -163,10 +90,69 @@ const ManageTeacher = () => {
       phone: "",
       address: "",
       birthday: undefined,
-      sex: undefined,
-      bloodType: undefined,
+      sex: "" as any,
+      bloodType: "" as any,
     },
   });
+
+  const { isLoading: teacherLoading } = useQuery({
+    queryKey: ["teacher", id],
+    queryFn: async () => {
+      try {
+        const response = await axios.get(`/api/teachers/getteacher/${id}`);
+        const teacherData = response.data.data;
+        const birthday = teacherData.birthday ? new Date(teacherData.birthday) : undefined;
+        form.reset({
+          username: teacherData.username || "",
+          firstname: teacherData.name || "",
+          lastname: teacherData.surname || "",
+          email: teacherData.email || "",
+          phone: teacherData.phone || "",
+          address: teacherData.address || "",
+          bloodType: teacherData.bloodType || "",
+          password: "",
+          sex: teacherData.sex || undefined,
+          birthday: birthday,
+        });
+        if (birthday) setDate(birthday);
+        return teacherData;
+      } catch (error) {
+        toast.error("Failed to load teacher data");
+        throw error;
+      }
+    },
+    enabled: action === "edit" && !!id,
+  });
+
+  const teacherMutation = useMutation({
+    mutationFn: async (values: FormData) => {
+      if (action === "create") {
+        return await axios.post("/api/teachers/create", values);
+      } else {
+        return await axios.put(`/api/teachers/update/${id}`, values);
+      }
+    },
+    onSuccess: () => {
+      toast.success(`Teacher ${action === "create" ? "created" : "updated"} successfully!`);
+      queryClient.invalidateQueries({ queryKey: ["teachers"] });
+      router.push("/list/teachers");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Something went wrong during save");
+    },
+  });
+
+  const onSubmit = (data: FormData) => {
+    teacherMutation.mutate(data);
+  };
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const startYear = getYear(new Date()) - 100;
+  const endYear = getYear(new Date()) + 10;
+  const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
 
   const handleMonthChange = (month: string) => {
     const newDate = setMonth(date, months.indexOf(month));
@@ -185,336 +171,217 @@ const ManageTeacher = () => {
     }
   };
 
-  const teacherMutation = useMutation({
-    mutationFn: async (data: FormData) => {
-      if (action === "create") {
-        return await axios.post("/api/teachers/create", data);
-      } else if (action === "edit" && id) {
-        return await axios.put(`/api/teachers/update/${id}`, data);
-      } else {
-        throw new Error("Invalid action");
-      }
-    },
-    onSuccess: () => {
-      toast.success(
-        `Teacher ${action === "create" ? "created" : "updated"} successfully!`
-      );
-      router.push("/list/teachers");
-      form.reset();
-      queryClient.invalidateQueries({ queryKey: ["teachers"] });
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        "An unexpected error occurred";
-
-      toast.error(message);
-    },
-  });
-
-  // Usage
-  const onSubmit = (data: FormData) => {
-    teacherMutation.mutate(data);
-  };
+  if (action === "edit" && teacherLoading) {
+    return <div className="flex h-screen items-center justify-center"><Loader /></div>;
+  }
 
   return (
-    <div className="p-4">
-      <h1 className="scroll-m-20 text-2xl font-semibold tracking-tight">
-        {action === "create" ? "Create Teacher" : "Edit Teacher"}
+    <div className="p-6 max-w-5xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">
+        {action === "create" ? "Add New Teacher" : "Edit Teacher"}
       </h1>
 
       <Form {...form}>
-        <form className="mt-4" onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="firstname"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>First Name</FormLabel>
-                    <Input
-                      type="text"
-                      placeholder="Type here"
-                      {...form.register("firstname")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.firstname?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="lastname"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Last Name</FormLabel>
-                    <Input
-                      type="text"
-                      placeholder="Type here"
-                      {...form.register("lastname")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.lastname?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="username"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Username</FormLabel>
-                    <Input
-                      type="text"
-                      placeholder="Type here"
-                      {...form.register("username")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.username?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="email"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <Input
-                      type="email"
-                      placeholder="Type here"
-                      {...form.register("email")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.email?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="password"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <Input
-                      type="text"
-                      placeholder="Type here"
-                      {...form.register("password")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.password?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="phone"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Phone #</FormLabel>
-                    <Input
-                      type="text"
-                      placeholder="Type here"
-                      {...form.register("phone")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.phone?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="address"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Address</FormLabel>
-                    <Input
-                      type="text"
-                      placeholder="Type here"
-                      {...form.register("address")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.address?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="birthday"
-                render={() => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Date of Birth</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !date && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {date ? (
-                            format(date, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
-                        <div className="flex justify-between p-2">
-                          <Select
-                            onValueChange={handleMonthChange}
-                            value={months[getMonth(date)]}
-                          >
-                            <SelectTrigger className="w-[110px]">
-                              <SelectValue placeholder="Month" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {months.map((month) => (
-                                <SelectItem key={month} value={month}>
-                                  {month}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Select
-                            onValueChange={handleYearChange}
-                            value={getYear(date).toString()}
-                          >
-                            <SelectTrigger className="w-[110px]">
-                              <SelectValue placeholder="Year" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {years.map((year) => (
-                                <SelectItem key={year} value={year.toString()}>
-                                  {year}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <Calendar
-                          mode="single"
-                          selected={date}
-                          onSelect={handleSelect}
-                          initialFocus
-                          month={date}
-                          onMonthChange={setDate}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage>
-                      {form.formState.errors.birthday?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="sex"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Gender</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a gender" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="MALE">Male</SelectItem>
-                        <SelectItem value="FEMALE">Female</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage>
-                      {form.formState.errors.sex?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="bloodType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Blood Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a blood type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(
-                          (type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          )
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <FormField
+              control={form.control}
+              name="firstname"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>First Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="John" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="lastname"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Last Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Doe" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="username"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Username</FormLabel>
+                  <FormControl>
+                    <Input placeholder="johndoe" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="john@example.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder={action === "edit" ? "Leave blank to keep current" : "*******"} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone</FormLabel>
+                  <FormControl>
+                    <Input placeholder="+1234567890" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="address"
+              render={({ field }) => (
+                <FormItem className="col-span-full">
+                  <FormLabel>Address</FormLabel>
+                  <FormControl>
+                    <Input placeholder="123 Street, City, Country" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="birthday"
+              render={() => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Birthday</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !form.watch("birthday") && "text-muted-foreground"
                         )}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage>
-                      {form.formState.errors.bloodType?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {form.watch("birthday") ? (
+                          format(form.watch("birthday"), "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <div className="flex gap-2 p-2">
+                        <Select onValueChange={handleMonthChange} value={months[getMonth(date)]}>
+                          <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Month" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Select onValueChange={handleYearChange} value={getYear(date).toString()}>
+                          <SelectTrigger className="w-[100px]">
+                            <SelectValue placeholder="Year" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {years.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Calendar
+                        mode="single"
+                        selected={form.watch("birthday")}
+                        onSelect={handleSelect}
+                        initialFocus
+                        month={date}
+                        onMonthChange={setDate}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="sex"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Gender</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="MALE">Male</SelectItem>
+                      <SelectItem value="FEMALE">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="bloodType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Blood Type</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(t => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
-          <Button
-            type="submit"
-            className="mt-4"
-            disabled={form.formState.isSubmitting}
-          >
-            {form.formState.isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {action === "create" ? "Creating..." : "Updating..."}
-              </>
-            ) : action === "create" ? (
-              "Create"
-            ) : (
-              "Update"
-            )}
-          </Button>
+
+          <div className="flex gap-4">
+            <Button type="submit" disabled={teacherMutation.isPending}>
+              {teacherMutation.isPending ? "Saving..." : action === "create" ? "Create Teacher" : "Update Teacher"}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+          </div>
         </form>
       </Form>
     </div>

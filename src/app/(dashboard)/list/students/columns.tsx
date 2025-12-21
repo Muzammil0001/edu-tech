@@ -1,28 +1,32 @@
 "use client";
 
 import { ColumnDef, Row } from "@tanstack/react-table";
-import { Edit, Trash } from "lucide-react";
+import { Edit, Eye, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTableColumnHeader } from "@/components/DataTableColumnHeaderProps";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
-import { useUser } from "@clerk/nextjs";
+import axios from "axios";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export type Student = {
-  id: number;
-  studentId: string;
+  id: string;
+  username: string;
   name: string;
+  surname: string;
   email: string;
   phone: string;
-  grade: number;
-  class: string;
+  grade: { level: number };
+  class: { name: string };
   address: string;
 };
 
-// ✅ Wrap columns inside a function to get role dynamically
-export const useStudentColumns = () => {
-  const { user } = useUser();
-  const role = user?.publicMetadata.role as string | undefined;
+export const useStudentColumns = (role?: string) => {
+  const queryClient = useQueryClient();
+  const router = useRouter();
 
   const columns: ColumnDef<Student>[] = [
     {
@@ -37,7 +41,7 @@ export const useStudentColumns = () => {
           aria-label="Select all"
         />
       ),
-      cell: ({ row }: { row: Row<Student> }) => (
+      cell: ({ row }) => (
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
@@ -48,14 +52,15 @@ export const useStudentColumns = () => {
       enableHiding: false,
     },
     {
-      accessorKey: "studentId",
-      header: "Student ID",
+      accessorKey: "username",
+      header: "Username",
     },
     {
       accessorKey: "name",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Name" />
       ),
+      cell: ({ row }) => `${row.original.name} ${row.original.surname}`,
     },
     {
       accessorKey: "email",
@@ -70,10 +75,12 @@ export const useStudentColumns = () => {
     {
       accessorKey: "grade",
       header: "Grade",
+      cell: ({ row }) => row.original.grade?.level || "N/A",
     },
     {
       accessorKey: "class",
       header: "Class",
+      cell: ({ row }) => row.original.class?.name || "N/A",
     },
     {
       accessorKey: "address",
@@ -86,19 +93,34 @@ export const useStudentColumns = () => {
           header: () => <div className="text-center">Action</div>,
           cell: ({ row }: { row: Row<Student> }) => (
             <div className="flex items-center justify-center space-x-2">
-              <Button variant="ghost" size="icon">
-                <Edit />
+              <Link href={`/list/students/profile/${row.original.id}`}>
+                <Button variant="ghost" size="icon">
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/list/students/manage?action=edit&id=${row.original.id}`)}
+              >
+                <Edit className="h-4 w-4" />
               </Button>
               <DeleteDialog
                 trigger={
                   <Button variant="ghost" size="icon">
-                    <Trash className="text-destructive" />
+                    <Trash className="h-4 w-4 text-destructive" />
                   </Button>
                 }
                 title="Delete Student"
-                description="This action cannot be undone. This will permanently delete the student and remove their data from our servers."
-                onDelete={() => {
-                  console.log("Deleting student:", row.original);
+                description="This action cannot be undone. This will permanently delete the student record."
+                onDelete={async () => {
+                  try {
+                    await axios.delete(`/api/students/delete/${row.original.id}`);
+                    toast.success("Student deleted successfully");
+                    queryClient.invalidateQueries({ queryKey: ["students"] });
+                  } catch (error: any) {
+                    toast.error("Failed to delete student");
+                  }
                 }}
               />
             </div>

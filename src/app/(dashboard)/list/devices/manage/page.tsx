@@ -1,8 +1,8 @@
 "use client";
+
 import React, { useEffect } from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { format, getMonth, getYear, setMonth, setYear } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import axios from "axios";
@@ -14,25 +14,11 @@ import {
   FormMessage,
   FormLabel,
 } from "@/components/ui/form";
-import { cn } from "@/lib/utils";
-import { CalendarIcon, Loader2 } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
+import Loader from "@/components/ui/loader";
 
 const Schema = z.object({
   name: z
@@ -43,46 +29,15 @@ const Schema = z.object({
     .string()
     .min(3, { message: "Device ID must be at least 3 characters long" }),
 });
+
 type FormData = z.infer<typeof Schema>;
 
 const ManageDevice = () => {
   const router = useRouter();
-  const [action, setAction] = React.useState<string>("create");
-  const search = useSearchParams();
-  const path = search.get("action");
-  const id = search.get("id");
+  const searchParams = useSearchParams();
+  const action = searchParams.get("action") || "create";
+  const id = searchParams.get("id");
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    const fetchDevice = async () => {
-      if (action === "edit" && id) {
-        try {
-          const response = await axios.get(
-            `/api/devices/getsingledevice/${id}`
-          );
-          const deviceData = response.data;
-
-          console.log(deviceData);
-          // Reset form values with the fetched data
-          form.reset({
-            name: deviceData.name || "",
-            deviceId: deviceData.deviceId || "",
-          });
-        } catch (error) {
-          console.error("Error fetching device:", error);
-        }
-      }
-    };
-
-    fetchDevice();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [action, id]);
-
-  useEffect(() => {
-    if (path) {
-      setAction(path);
-    }
-  }, [path]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(Schema),
@@ -92,107 +47,98 @@ const ManageDevice = () => {
     },
   });
 
+  const { isLoading: deviceLoading } = useQuery({
+    queryKey: ["device", id],
+    queryFn: async () => {
+      try {
+        const response = await axios.get(`/api/devices/getsingledevice/${id}`);
+        const deviceData = response.data;
+        form.reset({
+          name: deviceData.name || "",
+          deviceId: deviceData.deviceId || "",
+        });
+        return deviceData;
+      } catch (error) {
+        toast.error("Failed to load device data");
+        throw error;
+      }
+    },
+    enabled: action === "edit" && !!id,
+  });
+
   const deviceMutation = useMutation({
     mutationFn: async (data: FormData) => {
       if (action === "create") {
-        console.log(data);
         return await axios.post("/api/devices/create", data);
-      } else if (action === "edit" && id) {
-        return await axios.put(`/api/devices/update/${id}`, data);
       } else {
-        throw new Error("Invalid action");
+        return await axios.put(`/api/devices/update/${id}`, data);
       }
     },
     onSuccess: () => {
-      toast.success(
-        `Device ${action === "create" ? "created" : "updated"} successfully!`
-      );
+      toast.success(`Device ${action === "create" ? "created" : "updated"} successfully!`);
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
       router.push("/list/devices");
-      form.reset();
-      queryClient.invalidateQueries({ queryKey: ["device"] });
     },
-
     onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        "An unexpected error occurred";
-
-      toast.error(message);
+      toast.error(error.response?.data?.message || "Something went wrong during save");
     },
   });
 
-  // Usage
   const onSubmit = (data: FormData) => {
     deviceMutation.mutate(data);
   };
 
+  if (action === "edit" && deviceLoading) {
+    return <div className="flex h-screen items-center justify-center"><Loader /></div>;
+  }
+
   return (
-    <div className="p-4">
-      <h1 className="scroll-m-20 text-2xl font-semibold tracking-tight">
+    <div className="p-6 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">
         {action === "create" ? "Create Device" : "Edit Device"}
       </h1>
 
       <Form {...form}>
-        <form className="mt-4" onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="name"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Device Name</FormLabel>
-                    <Input
-                      type="text"
-                      placeholder="Type here"
-                      {...form.register("name")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.name?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Device Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Front Door Camera" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-            <div className="flex flex-col gap-2">
-              <FormField
-                control={form.control}
-                name="deviceId"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Device ID</FormLabel>
-                    <Input
-                      type="text"
-                      placeholder="Type here"
-                      {...form.register("deviceId")}
-                    />
-                    <FormMessage>
-                      {form.formState.errors.deviceId?.message}
-                    </FormMessage>
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="deviceId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Device ID</FormLabel>
+                  <FormControl>
+                    <Input placeholder="DEV-001" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
-          <Button
-            type="submit"
-            className="mt-4"
-            disabled={form.formState.isSubmitting}
-          >
-            {form.formState.isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {action === "create" ? "Creating..." : "Updating..."}
-              </>
-            ) : action === "create" ? (
-              "Create"
-            ) : (
-              "Update"
-            )}
-          </Button>
+
+          <div className="flex gap-4">
+            <Button
+              type="submit"
+              disabled={deviceMutation.isPending}
+            >
+              {deviceMutation.isPending ? "Saving..." : action === "create" ? "Create Device" : "Update Device"}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+          </div>
         </form>
       </Form>
     </div>

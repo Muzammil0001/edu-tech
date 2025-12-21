@@ -1,13 +1,44 @@
-import Announcements from "@/components/Announcements";
-import BigCalendar from "@/components/BigCalendar";
-import { Performance } from "@/components/Performance";
+"use client";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Calendar, Droplet, Mail, Phone, Presentation, Shapes, Split, UserRoundCheck } from "lucide-react";
+import { Calendar, Droplet, Mail, Phone, Presentation, Shapes, UserRoundCheck } from "lucide-react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
+import { useParams } from "next/navigation";
+import Loader from "@/components/ui/loader";
+import { format } from "date-fns";
 
 const SingleTeacherPage = () => {
+  const { id } = useParams();
+
+  const { data: teacher, isLoading } = useQuery({
+    queryKey: ["teacher", id],
+    queryFn: async () => {
+      const res = await axios.get(`/api/teachers/getteacher/${id}`);
+      return res.data.data;
+    },
+    enabled: !!id,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader />
+      </div>
+    );
+  }
+
+  if (!teacher) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        Teacher not found
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-4 flex flex-col gap-4 xl:flex-row">
       {/* LEFT */}
@@ -15,134 +46,110 @@ const SingleTeacherPage = () => {
         {/* TOP */}
         <div className="flex flex-col lg:flex-row gap-4">
           {/* USER INFO CARD */}
-          <Card>
-          <div className="py-6 px-4 rounded-md flex-1 flex flex-col md:flex-row items-center gap-4">
-            <div className="w-1/3 flex justify-center items-center">
-              <Avatar className="w-40 h-40">
-                <AvatarImage
-                  src="https://github.com/shadcn.png"
-                  alt="@shadcn"
-                />
-                <AvatarFallback>AD</AvatarFallback>
-              </Avatar>
-            </div>
-            <div className="w-2/3 flex flex-col justify-between gap-4 text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-4 text-center md:text-left">
-                <h1 className="text-xl font-semibold ">Leonard Snyder</h1>
+          <Card className="flex-1">
+            <div className="py-6 px-4 rounded-md flex flex-col md:flex-row items-center gap-4">
+              <div className="w-full md:w-1/3 flex justify-center items-center">
+                <Avatar className="w-32 h-32 md:w-40 md:h-40">
+                  <AvatarImage
+                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${teacher.username}`}
+                    alt={teacher.name}
+                  />
+                  <AvatarFallback>{teacher.name.charAt(0)}{teacher.surname.charAt(0)}</AvatarFallback>
+                </Avatar>
               </div>
-              <p className="text-sm text-gray-500">
-                Lorem ipsum, dolor sit amet consectetur adipisicing elit.
-              </p>
-              <div className="flex w-full items-center gap-2 flex-wrap text-xs font-medium">
-                <div className="w-full md:w-1/3 lg:w-full 2xl:w-1/3 flex justify-center md:justify-start items-center gap-2">
-                  <Droplet width={14} height={14} />
-                  <span>A+</span>
+              <div className="w-full md:w-2/3 flex flex-col justify-between gap-4 text-center md:text-left">
+                <div className="flex items-center justify-center md:justify-start gap-4">
+                  <h1 className="text-xl font-semibold ">{teacher.name} {teacher.surname}</h1>
+                  <Badge variant="outline" className="capitalize">{teacher.sex.toLowerCase()}</Badge>
                 </div>
-                <div className="w-full md:w-1/3 lg:w-full 2xl:w-1/3 flex justify-center md:justify-start items-center gap-2">
-                  <Calendar width={14} height={14} />
-                  <span>January 2025</span>
-                </div>
-                <div className="w-full md:w-1/3 lg:w-full 2xl:w-1/3 flex justify-center md:justify-start items-center gap-2">
-                  <Mail width={14} height={14} />
-                  <span>user@gmail.com</span>
-                </div>
-                <div className="w-full md:w-1/3 lg:w-full 2xl:w-1/3 flex justify-center md:justify-start items-center gap-2">
-                  <Phone width={14} height={14} />
-                  <span>+1 234 567</span>
+                <p className="text-sm text-gray-500">
+                  {teacher.address || "No address provided."}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium">
+                  <div className="flex items-center gap-2">
+                    <Droplet className="w-4 h-4 text-primary" />
+                    <span>{teacher.bloodType || "N/A"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-primary" />
+                    <span>Joined {format(new Date(teacher.createdAt), "MMMM yyyy")}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-primary" />
+                    <span className="truncate">{teacher.email}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-primary" />
+                    <span>{teacher.phone || "N/A"}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           </Card>
           {/* SMALL CARDS */}
           <div className="flex-1 flex gap-4 justify-between flex-wrap">
             {/* CARD */}
-            <Card className="w-full md:w-[48%] xl:w-[45%] 2xl:w-[48%]">
-            <div className=" p-4 rounded-md flex items-center gap-4">
-              <UserRoundCheck
-                width={24}
-                height={24}
-                className="h-6 w-6"
-              />
-              <div className="">
+            <Card className="w-full sm:w-[48%] p-4 flex items-center gap-4">
+              <UserRoundCheck className="h-6 w-6 text-blue-500" />
+              <div>
                 <h1 className="text-xl font-semibold">90%</h1>
                 <span className="text-sm text-gray-400">Attendance</span>
               </div>
-            </div>
             </Card>
             {/* CARD */}
-            <Card className="w-full md:w-[48%] xl:w-[45%] 2xl:w-[48%]">
-            <div className=" p-4 rounded-md flex items-center gap-4">
-              <Split
-                width={24}
-                height={24}
-              />
-              <div className="">
-                <h1 className="text-xl font-semibold">2</h1>
-                <span className="text-sm text-gray-400">Branches</span>
+            <Card className="w-full sm:w-[48%] p-4 flex items-center gap-4">
+              <Shapes className="h-6 w-6 text-purple-500" />
+              <div>
+                <h1 className="text-xl font-semibold">{teacher.subjects?.length || 0}</h1>
+                <span className="text-sm text-gray-400">Subjects</span>
               </div>
-            </div>
             </Card>
             {/* CARD */}
-            <Card className="w-full md:w-[48%] xl:w-[45%] 2xl:w-[48%]">
-            <div className="p-4 rounded-md flex items-center gap-4 ">
-              <Presentation
-                width={24}
-                height={24}
-              />
-              <div className="">
-                <h1 className="text-xl font-semibold">6</h1>
+            <Card className="w-full sm:w-[48%] p-4 flex items-center gap-4">
+              <Presentation className="h-6 w-6 text-yellow-500" />
+              <div>
+                <h1 className="text-xl font-semibold">{teacher.lessons?.length || 0}</h1>
                 <span className="text-sm text-gray-400">Lessons</span>
               </div>
-            </div>
             </Card>
             {/* CARD */}
-            <Card className="w-full md:w-[48%] xl:w-[45%] 2xl:w-[48%]">
-            <div className="p-4 rounded-md flex items-center gap-4">
-              <Shapes
-                width={24}
-                height={24}
-              />
-              <div className="">
-                <h1 className="text-xl font-semibold">6</h1>
+            <Card className="w-full sm:w-[48%] p-4 flex items-center gap-4">
+              <Shapes className="h-6 w-6 text-pink-500" />
+              <div>
+                <h1 className="text-xl font-semibold">{teacher.classes?.length || 0}</h1>
                 <span className="text-sm text-gray-400">Classes</span>
               </div>
-            </div>
             </Card>
           </div>
         </div>
         {/* BOTTOM */}
-        <div className="mt-4 bg-white rounded-md p-4 h-[800px]">
-          <h1>Teacher&apos;s Schedule</h1>
-          <BigCalendar />
-        </div>
+        {/* Removed dummy BigCalendar */}
       </div>
       {/* RIGHT */}
       <div className="w-full xl:w-1/3 flex flex-col gap-4">
-        <div className=" rounded-md">
-          <h1 className="text-xl font-semibold">Shortcuts</h1>
+        <div>
+          <h1 className="text-xl font-semibold mb-2">Shortcuts</h1>
           <Card className="p-4">
-          <div className="flex gap-4 flex-wrap text-xs text-gray-500">
-            <Link className="" href="/">
-              <Badge>Teacher&apos;s Classes</Badge>
-            </Link>
-            <Link className="" href="/">
-              <Badge>Teacher&apos;s Students</Badge>
-            </Link>
-            <Link className="" href="/">
-              <Badge>Teacher&apos;s Lessons</Badge>
-            </Link>
-            <Link className="" href="/">
-              <Badge>Teacher&apos;s Exams</Badge>
-            </Link>
-            <Link className="" href="/">
-              <Badge>Teacher&apos;s Assignments</Badge>
-            </Link>
-          </div>
+            <div className="flex gap-2 flex-wrap text-xs">
+              <Link href={`/list/classes?supervisorId=${teacher.id}`}>
+                <Badge variant="secondary" className="cursor-pointer hover:bg-primary hover:text-white transition-colors">Teacher&apos;s Classes</Badge>
+              </Link>
+              <Link href={`/list/students?teacherId=${teacher.id}`}>
+                <Badge variant="secondary" className="cursor-pointer hover:bg-primary hover:text-white transition-colors">Teacher&apos;s Students</Badge>
+              </Link>
+              <Link href={`/list/lessons?teacherId=${teacher.id}`}>
+                <Badge variant="secondary" className="cursor-pointer hover:bg-primary hover:text-white transition-colors">Teacher&apos;s Lessons</Badge>
+              </Link>
+              <Link href={`/list/exams?teacherId=${teacher.id}`}>
+                <Badge variant="secondary" className="cursor-pointer hover:bg-primary hover:text-white transition-colors">Teacher&apos;s Exams</Badge>
+              </Link>
+              <Link href={`/list/assignments?teacherId=${teacher.id}`}>
+                <Badge variant="secondary" className="cursor-pointer hover:bg-primary hover:text-white transition-colors">Teacher&apos;s Assignments</Badge>
+              </Link>
+            </div>
           </Card>
         </div>
-        <Performance />
-        <Announcements />
+        {/* Removed dummy Performance and Announcements */}
       </div>
     </div>
   );

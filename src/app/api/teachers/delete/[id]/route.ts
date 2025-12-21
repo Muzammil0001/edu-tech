@@ -2,14 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { users } from "@clerk/clerk-sdk-node";
 
-const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY!;
-
-type RouteContext = {
-  params: {
-    id: string;
-  };
-};
-
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -24,7 +16,7 @@ export async function DELETE(
   }
 
   try {
-    // Step 1: Find teacher and get their Clerk user ID
+    // Step 1: Check if teacher exists
     const teacher = await prisma.teacher.findUnique({
       where: { id },
     });
@@ -36,28 +28,41 @@ export async function DELETE(
       );
     }
 
-    const clerkUserId = teacher.id; // Assuming your model stores Clerk ID here
+    // Step 2: Delete from local database first (handles relational checks)
+    try {
+      await prisma.teacher.delete({
+        where: { id },
+      });
+    } catch (error: any) {
+      // Handle common Prisma foreign key constraint error (P2003)
+      if (error.code === 'P2003') {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Unable to delete teacher because they are assigned as a class supervisor or have existing lessons. Please reassign or delete those records first."
+          },
+          { status: 400 }
+        );
+      }
+      throw error;
+    }
 
-    // Step 2: Delete user from Clerk (if exists)
-    await users.deleteUser(clerkUserId);
-
-    // Step 3: Delete from your local database
-    await prisma.teacher.delete({
-      where: { id },
-    });
+    // Step 3: Delete user from Clerk after successful DB deletion
+    try {
+      await users.deleteUser(id);
+    } catch (clerkError) {
+      console.warn("Deleted from database but Clerk user deletion failed or user already gone:", clerkError);
+      // We still return true because the primary record in our system is gone
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Teacher deleted from Clerk and database",
+      message: "Teacher deleted successfully",
     });
   } catch (error: any) {
     console.error("[DELETE_TEACHER_ERROR]", error);
-
     return NextResponse.json(
-      {
-        success: false,
-        message: error?.message || "Failed to delete teacher",
-      },
+      { success: false, message: error?.message || "Internal server error" },
       { status: 500 }
     );
   }

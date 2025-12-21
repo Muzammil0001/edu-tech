@@ -1,24 +1,80 @@
-"use client"
-import React, { use } from 'react'
+"use client";
+
+import React, { useEffect, useState } from 'react';
 import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import { PlusCircle } from 'lucide-react';
-import { lessonsData } from '@/lib/data';
 import { useLessonColumns } from './column';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
+import Loader from '@/components/ui/loader';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 
 const LessonList = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, isLoaded } = useUser();
+  const [mounted, setMounted] = useState(false);
 
-  const columns = useLessonColumns();
+  const teacherId = searchParams.get("teacherId");
+  const classId = searchParams.get("classId");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const role = user?.publicMetadata?.role as string;
+  const columns = useLessonColumns(role);
+
+  const { data: lessons, isLoading } = useQuery({
+    queryKey: ["lessons", teacherId, classId],
+    queryFn: async () => {
+      const res = await axios.get("/api/lessons/getalllessons");
+      let data = res.data.data;
+
+      if (teacherId) {
+        data = data.filter((item: any) => item.teacherId === teacherId);
+      }
+      if (classId) {
+        data = data.filter((item: any) => item.classId === parseInt(classId));
+      }
+
+      return data;
+    }
+  });
 
   return (
     <div className="container mx-auto px-4 py-10">
-      <div className='flex justify-between items-center'>
-        <h1 className="text-2xl font-semibold mb-4">Lessons</h1>
-        <Button className='mb-4 flex items-center'><PlusCircle /> Register Lesson</Button>
+      <div className='flex justify-between items-center mb-6'>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-tight">Lessons</h1>
+          {(teacherId || classId) && (
+            <p className="text-sm text-muted-foreground">Showing filtered results</p>
+          )}
+        </div>
+        {mounted && isLoaded && (role === "admin" || role === "teacher") && (
+          <Button
+            onClick={() => router.push("/list/lessons/manage?action=create")}
+            className='flex items-center gap-2'
+          >
+            <PlusCircle className="h-4 w-4" /> Add New Lesson
+          </Button>
+        )}
       </div>
-      <DataTable columns={columns} data={lessonsData} filterableColumns={["subject", "class", "teacher"]} />
+      {isLoading ? (
+        <div className="flex h-64 items-center justify-center">
+          <Loader />
+        </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={lessons || []}
+          filterableColumns={["name", "day"]}
+        />
+      )}
     </div>
-  )
-}
+  );
+};
 
-export default LessonList
+export default LessonList;
