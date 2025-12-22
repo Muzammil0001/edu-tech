@@ -4,7 +4,7 @@ import { Day, UserSex } from "@prisma/client";
 
 const adminUsername = "admin";
 const adminEmail = `${adminUsername}@example.com`;
-const adminPassword = "@Graysclub10";
+const adminPassword = "Admin@1234";
 
 async function main() {
     // Ordered deletion to avoid foreign key constraints
@@ -25,7 +25,6 @@ async function main() {
     // Note: Not deleting Admin to avoid re-creation issues if not intended, 
     // but the following logic handles existing admins anyway.
 
-    console.log("✅ Data cleared.");
 
     // 1. Grades
     const grades = [];
@@ -171,14 +170,23 @@ async function main() {
     console.log("✅ Seed data generated successfully");
 
     // 9. Admin Setup
-    // Step 1: Check if the admin user exists in Clerk
-    const existingClerkUsers = await users.getUserList({
+    const usersByEmail = await users.getUserList({
         emailAddress: [adminEmail],
+    });
+
+    const usersByUsername = await users.getUserList({
+        username: [adminUsername],
     });
 
     let clerkUser;
 
-    if (existingClerkUsers.length === 0) {
+    if (usersByEmail.length > 0) {
+        clerkUser = usersByEmail[0];
+    } else if (usersByUsername.length > 0) {
+        clerkUser = usersByUsername[0];
+    }
+
+    if (!clerkUser) {
         // Create Clerk user with public metadata
         clerkUser = await users.createUser({
             username: adminUsername,
@@ -189,15 +197,15 @@ async function main() {
 
         console.log("✅ Admin created in Clerk with metadata:", clerkUser.publicMetadata);
     } else {
-        clerkUser = existingClerkUsers[0];
         console.log("✅ Admin already exists in Clerk");
 
         // Ensure metadata is set if the user already exists
         await users.updateUser(clerkUser.id, {
             publicMetadata: { role: "admin" },
+            password: adminPassword,
         });
 
-        console.log("✅ Updated Clerk user metadata to include role: admin");
+        console.log("✅ Updated Clerk user metadata and password for role: admin");
     }
 
     // Step 2: Ensure admin exists in Postgres using Prisma
