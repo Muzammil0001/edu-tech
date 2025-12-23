@@ -3,6 +3,7 @@ import { menuItems } from './Menu'
 import { SidebarMenuItem, SidebarMenuButton, SidebarGroupLabel, SidebarGroupContent, SidebarMenu } from './ui/sidebar'
 import Link from 'next/link'
 import { currentUser } from '@clerk/nextjs/server'
+import { SignOutButton } from '@clerk/nextjs'
 
 const MenuItems = async () => {
 
@@ -20,10 +21,19 @@ const MenuItems = async () => {
                                 return (
                                     <SidebarMenuItem key={subItem.href}>
                                         <SidebarMenuButton asChild>
-                                            <Link href={subItem.href}>
-                                                {React.cloneElement(subItem.icon)}
-                                                <span>{subItem.label}</span>
-                                            </Link>
+                                            {subItem.href === "/logout" ? (
+                                                <SignOutButton redirectUrl="/">
+                                                    <div className="flex w-full items-center gap-2 cursor-pointer">
+                                                        {React.cloneElement(subItem.icon)}
+                                                        <span>{subItem.label}</span>
+                                                    </div>
+                                                </SignOutButton>
+                                            ) : (
+                                                <Link href={subItem.href}>
+                                                    {React.cloneElement(subItem.icon)}
+                                                    <span>{subItem.label}</span>
+                                                </Link>
+                                            )}
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
                                 )
