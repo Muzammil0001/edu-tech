@@ -9,7 +9,6 @@ import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { toast } from "sonner";
-import { useUser } from "@clerk/nextjs";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 
@@ -23,9 +22,7 @@ export type Attendance = {
     device: string;
 };
 
-export const useAttendanceColumns = () => {
-    const { user } = useUser();
-    const role = user?.publicMetadata.role as string | undefined;
+export const useAttendanceColumns = (role?: string) => {
     const queryClient = useQueryClient();
     const router = useRouter();
 

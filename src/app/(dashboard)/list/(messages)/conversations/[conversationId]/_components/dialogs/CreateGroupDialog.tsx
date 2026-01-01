@@ -46,7 +46,7 @@ const CreateGroupDialog = (props: Props) => {
     const members = form.watch("members", []);
 
     const unselectedFriends = useMemo(() => {
-        return friends ? friends.filter((friend) => !members.includes(friend._id)) : [];
+        return friends ? friends.filter((friend) => friend && !members.includes(friend._id)) : [];
     }, [members, friends]);
 
 
@@ -102,15 +102,16 @@ const CreateGroupDialog = (props: Props) => {
                                                 <Button className='w-full' variant="outline">Select</Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent className='w-full'>
-                                                {unselectedFriends.map(friends => {
-                                                    return <DropdownMenuCheckboxItem key={friends._id} className='flex items-center gap-2 w-full p-2' onCheckedChange={checked => {
+                                                {unselectedFriends.map(friend => {
+                                                    if (!friend) return null;
+                                                    return <DropdownMenuCheckboxItem key={friend._id} className='flex items-center gap-2 w-full p-2' onCheckedChange={checked => {
                                                         if (checked) {
-                                                            form.setValue("members", [...members, friends._id])
+                                                            form.setValue("members", [...members, friend._id])
                                                         }
                                                     }}><Avatar className='w-8 h-8'>
-                                                        <AvatarImage src={friends.username} />
-                                                            <AvatarFallback className='flex items-center justify-center w-full'>{friends.username.substring(0, 1)}</AvatarFallback></Avatar>
-                                                        <h4 className='truncate'>{friends.username}</h4>
+                                                            <AvatarImage src={friend.username} />
+                                                            <AvatarFallback className='flex items-center justify-center w-full'>{friend.username.substring(0, 1)}</AvatarFallback></Avatar>
+                                                        <h4 className='truncate'>{friend.username}</h4>
                                                     </DropdownMenuCheckboxItem>
                                                 })}
                                             </DropdownMenuContent>
@@ -121,7 +122,8 @@ const CreateGroupDialog = (props: Props) => {
                             )
                         }} />
                         {members && members.length ? <Card className='flex items-start justify-center gap-3 oveflow-x-auto w-full h-24 p-2 no-scrollbar'>
-                            {friends?.filter(friend => members.includes(friend._id)).map(friend => {
+                            {friends?.filter(friend => friend && members.includes(friend._id)).map(friend => {
+                                if (!friend) return null;
                                 return <div key={friend._id} className='flex flex-col items-center gap-1'>
                                     <div className='relative'>
                                         <Avatar><AvatarFallback className='flex items-center justify-center w-full'>{friend.username.substring(0, 1)}</AvatarFallback></Avatar>
