@@ -1,6 +1,8 @@
-import prisma from "@/lib/prisma";
-import { users } from "@clerk/clerk-sdk-node";
+import prisma from "../src/lib/prisma";
+import { createClerkClient } from "@clerk/backend";
 import { Day, UserSex } from "@prisma/client";
+
+const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
 const adminUsername = "admin";
 const adminEmail = `${adminUsername}@example.com`;
@@ -170,65 +172,73 @@ async function main() {
     console.log("✅ Seed data generated successfully");
 
     // 9. Admin Setup
-    const usersByEmail = await users.getUserList({
-        emailAddress: [adminEmail],
-    });
-
-    const usersByUsername = await users.getUserList({
-        username: [adminUsername],
-    });
-
-    let clerkUser;
-
-    if (usersByEmail.length > 0) {
-        clerkUser = usersByEmail[0];
-    } else if (usersByUsername.length > 0) {
-        clerkUser = usersByUsername[0];
-    }
-
-    if (!clerkUser) {
-        // Create Clerk user with public metadata
-        clerkUser = await users.createUser({
-            username: adminUsername,
-            password: adminPassword,
-            emailAddress: [adminEmail],
-            publicMetadata: { role: "admin" },
-        });
-
-        console.log("✅ Admin created in Clerk with metadata:", clerkUser.publicMetadata);
+    if (!process.env.CLERK_SECRET_KEY) {
+        console.warn("⚠️ Skipping Clerk seeding: CLERK_SECRET_KEY not found in environment variables");
     } else {
-        console.log("✅ Admin already exists in Clerk");
+        try {
+            const usersByEmail = await clerkClient.users.getUserList({
+                emailAddress: [adminEmail],
+            });
 
-        // Ensure metadata is set if the user already exists
-        await users.updateUser(clerkUser.id, {
-            publicMetadata: { role: "admin" },
-            password: adminPassword,
-        });
+            const usersByUsername = await clerkClient.users.getUserList({
+                username: [adminUsername],
+            });
 
-        console.log("✅ Updated Clerk user metadata and password for role: admin");
-    }
+            let clerkUser;
 
-    // Step 2: Ensure admin exists in Postgres using Prisma
-    const existingAdminByUsername = await prisma.admin.findUnique({
-        where: { username: adminUsername },
-    });
+            if (usersByEmail.data.length > 0) {
+                clerkUser = usersByEmail.data[0];
+            } else if (usersByUsername.data.length > 0) {
+                clerkUser = usersByUsername.data[0];
+            }
 
-    if (existingAdminByUsername) {
-        await prisma.admin.update({
-            where: { username: adminUsername },
-            data: { id: clerkUser.id },
-        });
+            if (!clerkUser) {
+                // Create Clerk user with public metadata
+                clerkUser = await clerkClient.users.createUser({
+                    username: adminUsername,
+                    password: adminPassword,
+                    emailAddress: [adminEmail],
+                    publicMetadata: { role: "admin" },
+                });
 
-        console.log("✅ Existing admin updated with Clerk ID");
-    } else {
-        await prisma.admin.create({
-            data: {
-                id: clerkUser.id,
-                username: adminUsername,
-            },
-        });
+                console.log("✅ Admin created in Clerk with metadata:", clerkUser.publicMetadata);
+            } else {
+                console.log("✅ Admin already exists in Clerk");
 
-        console.log("✅ Admin created in Postgres");
+                // Ensure metadata is set if the user already exists
+                await clerkClient.users.updateUser(clerkUser.id, {
+                    publicMetadata: { role: "admin" },
+                    password: adminPassword,
+                });
+
+                console.log("✅ Updated Clerk user metadata and password for role: admin");
+            }
+
+            // Step 2: Ensure admin exists in Postgres using Prisma
+            const existingAdminByUsername = await prisma.admin.findUnique({
+                where: { username: adminUsername },
+            });
+
+            if (existingAdminByUsername) {
+                await prisma.admin.update({
+                    where: { username: adminUsername },
+                    data: { id: clerkUser.id },
+                });
+
+                console.log("✅ Existing admin updated with Clerk ID");
+            } else {
+                await prisma.admin.create({
+                    data: {
+                        id: clerkUser.id,
+                        username: adminUsername,
+                    },
+                });
+
+                console.log("✅ Admin created in Postgres");
+            }
+        } catch (error) {
+            console.error("❌ Clerk seeding failed:", error);
+        }
     }
 }
 
