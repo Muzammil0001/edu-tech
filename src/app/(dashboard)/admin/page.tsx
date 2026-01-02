@@ -4,14 +4,23 @@ import { EventCalendar } from '@/components/EventCalendar'
 import { FinanceChart } from '@/components/FinanceChart'
 import UserCard from '@/components/UserCard'
 import React from 'react'
-import Announcements from './../../../components/Announcements';
+import Announcements from '@/components/Announcements';
 import prisma from '@/lib/prisma';
 
 const Admin = async () => {
-    const studentCount = await prisma.student.count();
-    const teacherCount = await prisma.teacher.count();
-    const parentCount = await prisma.parent.count();
-    const adminCount = await prisma.admin.count();
+    let studentCount = 0;
+    let teacherCount = 0;
+    let parentCount = 0;
+    let adminCount = 0;
+
+    try {
+        studentCount = await prisma.student.count();
+        teacherCount = await prisma.teacher.count();
+        parentCount = await prisma.parent.count();
+        adminCount = await prisma.admin.count();
+    } catch (error) {
+        console.error("Failed to fetch admin dashboard counts:", error);
+    }
 
     return (
         <div className='p-4 flex gap-4 flex-col md:flex-row'>
