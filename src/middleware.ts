@@ -8,13 +8,21 @@ const matchers = Object.keys(routeAccessMap).map((route) => ({
 }));
 
 export default clerkMiddleware(async (auth, req) => {
-  const { sessionClaims } = await auth();
-
+  const { sessionClaims, userId } = await auth();
   const role = (sessionClaims?.metadata as { role?: string })?.role;
 
   for (const { matcher, allowedRoles } of matchers) {
-    if (matcher(req) && !allowedRoles.includes(role!)) {
-      return NextResponse.redirect(new URL(`/${role}`, req.url));
+    if (matcher(req)) {
+      if (!userId) {
+        // Not logged in and trying to access a restricted route
+        return NextResponse.redirect(new URL("/sign-in", req.url));
+      }
+
+      if (!role || !allowedRoles.includes(role)) {
+        // Logged in but no role or wrong role
+        const fallback = role ? `/${role}` : "/";
+        return NextResponse.redirect(new URL(fallback, req.url));
+      }
     }
   }
 });

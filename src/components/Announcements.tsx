@@ -3,14 +3,21 @@ import { Card } from "@/components/ui/card"
 import prisma from "@/lib/prisma"
 import { format } from "date-fns"
 
+import { Announcement } from "@prisma/client"
+
 const Announcements = async () => {
   // Fetch real announcement data from database
-  const announcements = await prisma.announcement.findMany({
-    take: 3,
-    orderBy: {
-      date: 'desc'
-    }
-  });
+  let announcements: Announcement[] = [];
+  try {
+    announcements = await prisma.announcement.findMany({
+      take: 3,
+      orderBy: {
+        date: 'desc'
+      }
+    });
+  } catch (error) {
+    console.error("Failed to fetch announcements:", error);
+  }
 
   return (
     <div className="bg-white p-4 rounded-md">
