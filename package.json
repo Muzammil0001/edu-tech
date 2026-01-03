@@ -9,9 +9,6 @@
     "lint": "next lint",
     "vercel-build": "npx prisma generate && npx prisma db push --accept-data-loss && npx prisma db seed && next build"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "@clerk/backend": "^2.29.0",
     "@clerk/clerk-sdk-node": "^4.13.23",
