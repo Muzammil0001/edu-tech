@@ -198,7 +198,7 @@ const ResultManagePage = () => {
                                         <SelectItem value="none">None</SelectItem>
                                         {exams?.map((exam: any) => (
                                             <SelectItem key={exam.id} value={exam.id.toString()}>
-                                                {exam.title} ({exam.subject})
+                                                {exam.title} ({exam.lesson?.subject?.name})
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -224,7 +224,7 @@ const ResultManagePage = () => {
                                         <SelectItem value="none">None</SelectItem>
                                         {assignments?.map((assignment: any) => (
                                             <SelectItem key={assignment.id} value={assignment.id.toString()}>
-                                                {assignment.title} ({assignment.subject})
+                                                {assignment.title} ({assignment.lesson?.subject?.name})
                                             </SelectItem>
                                         ))}
                                     </SelectContent>

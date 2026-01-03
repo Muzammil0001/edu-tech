@@ -173,7 +173,7 @@ const ExamManagePage = () => {
                                     <SelectContent>
                                         {lessons?.map((lesson: any) => (
                                             <SelectItem key={lesson.id} value={lesson.id.toString()}>
-                                                {`${lesson.subject} - ${lesson.class}`}
+                                                {lesson.name} ({lesson.subject?.name}) - {lesson.class?.name}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
